@@ -18,18 +18,19 @@ from Spy.utils.formatters import time_to_seconds
 
 logger = LOGGER(__name__)
 
-# --- API KEY FIX (Checks for API_KEY, YT_API_KEY, or API_KEYS) ---
-raw_api_key = getattr(config, "API_KEY", getattr(config, "YT_API_KEY", getattr(config, "API_KEYS", "")))
+# --- CONFIG HANDLING (Fixes AttributeError) ---
+def get_config_key():
+    # Ye check karega API_KEY, YT_API_KEY ya API_KEYS mein se jo bhi config mein ho
+    key = getattr(config, "API_KEY", getattr(config, "YT_API_KEY", getattr(config, "API_KEYS", None)))
+    if isinstance(key, list):
+        return key
+    elif isinstance(key, str):
+        return [k.strip() for k in key.split(",")]
+    return []
 
-if isinstance(raw_api_key, list):
-    API_KEYS = raw_api_key
-elif isinstance(raw_api_key, str) and raw_api_key != "":
-    API_KEYS = [k.strip() for k in raw_api_key.split(",")]
-else:
-    API_KEYS = []
-
+API_KEYS = get_config_key()
 current_key_index = 0
-PROXY = getattr(config, "PROXY_URL", None) # Proxy support if you added it in config
+PROXY = getattr(config, "PROXY_URL", None)
 
 def get_youtube_client():
     global current_key_index
@@ -38,7 +39,7 @@ def get_youtube_client():
     try:
         return build("youtube", "v3", developerKey=API_KEYS[current_key_index], static_discovery=False)
     except Exception as e:
-        logger.error(f"Error building YouTube client: {e}")
+        logger.error(f"YouTube Client Build Error: {e}")
         return None
 
 def switch_key():
@@ -53,6 +54,8 @@ def switch_key():
 def get_cookie_file():
     try:
         folder_path = os.path.join(os.getcwd(), "cookies")
+        if not os.path.exists(folder_path):
+            return None
         txt_files = glob.glob(os.path.join(folder_path, '*.txt'))
         if not txt_files:
             return None
@@ -63,7 +66,7 @@ def get_cookie_file():
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
-        self.regex = r"(?:youtube\.com|youtu\.be)"
+        self.regex = r"(?:youtube\.com|youtu\.be|youtube\.com\/shorts)"
         self.listbase = "https://youtube.com/playlist?list="
 
     def parse_duration(self, duration):
@@ -97,10 +100,10 @@ class YouTubeAPI:
         if videoid: 
             vidid = link
         else:
-            match = re.search(r"(?:v=|\/|shorts\/)([0-9A-Za-z_-]{11})", link)
+            match = re.search(r"(?:v=|\/|shorts\/|youtu\.be\/)([0-9A-Za-z_-]{11})", link)
             vidid = match.group(1) if match else None
 
-        # Try API First
+        # --- Method 1: YouTube API (Fastest) ---
         youtube = get_youtube_client()
         if youtube:
             try:
@@ -119,23 +122,36 @@ class YouTubeAPI:
             except HttpError as e:
                 if e.resp.status == 403 and switch_key():
                     return await self.details(link, videoid)
+                logger.error(f"YouTube API error: {e}")
 
-        # Fallback to yt-dlp if API fails or no keys
+        # --- Method 2: yt-dlp (Strong Fallback for 403 Bypass) ---
         try:
             cookie = get_cookie_file()
-            ydl_opts = {"quiet": True, "cookiefile": cookie, "proxy": PROXY}
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "cookiefile": cookie,
+                "proxy": PROXY,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "referer": "https://www.google.com/",
+                "geo_bypass": True,
+            }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 search_query = f"ytsearch1:{link}" if not vidid else self.base + vidid
                 info = await asyncio.to_thread(ydl.extract_info, search_query, download=False)
                 if 'entries' in info: info = info['entries'][0]
                 
-                d_sec = info.get("duration", 0)
-                m, s = divmod(d_sec, 60)
+                title = info.get("title")
+                vidid = info.get("id")
+                duration_sec = info.get("duration", 0)
+                thumb = info.get("thumbnail")
+                
+                m, s = divmod(int(duration_sec), 60)
                 h, m = divmod(m, 60)
                 d_min = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
-                return info.get("title"), d_min, d_sec, info.get("thumbnail"), info.get("id")
+                return title, d_min, duration_sec, thumb, vidid
         except Exception as e:
-            logger.error(f"Fallback error: {e}")
+            logger.error(f"Details Fallback Error: {e}")
             return None
 
     async def track(self, link: str, videoid: Union[bool, str] = None):
@@ -160,12 +176,12 @@ class YouTubeAPI:
         if videoid: link = self.base + link
         loop = asyncio.get_running_loop()
         cookie = get_cookie_file()
-        
         if not os.path.exists("downloads"): os.mkdir("downloads")
 
         common_opts = {
             "quiet": True, "no_warnings": True, "geo_bypass": True, 
-            "nocheckcertificate": True, "proxy": PROXY, "cookiefile": cookie
+            "nocheckcertificate": True, "proxy": PROXY, "cookiefile": cookie,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
 
         def ytdl_run(opts):
@@ -181,8 +197,7 @@ class YouTubeAPI:
             else:
                 opts = {**common_opts, "format": "bestaudio/best", "outtmpl": "downloads/%(title)s.%(ext)s"}
 
-            downloaded_file = await loop.run_in_executor(None, lambda: ytdl_run(opts))
-            return downloaded_file
+            return await loop.run_in_executor(None, lambda: ytdl_run(opts))
         except Exception as e:
             logger.error(f"Download Error: {e}")
             return None
