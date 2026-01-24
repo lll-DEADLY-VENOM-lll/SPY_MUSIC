@@ -36,8 +36,8 @@ YOUTUBE_API_KEYS = [k.strip() for k in ["AIzaSyCFv5iwf9_CZKYcifMFK43zMZ78NH5GwE8
 UPSTREAM_REPO = getenv("UPSTREAM_REPO", "https://github.com/lll-DEADLY-VENOM-lll/SPY_MUSIC")
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "SPY")
 GIT_TOKEN = getenv("GIT_TOKEN", None)
-SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/about_deadly_venom")
-SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/NOBITA_SUPPORT")
+SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/hackarp13x")
+SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/bihari_music")
 
 # --- EXTRA PLUGINS CONFIG (Naye Features) ---
 AUTO_LEAVING_ASSISTANT = bool(getenv("AUTO_LEAVING_ASSISTANT", False))
