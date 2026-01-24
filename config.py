@@ -29,6 +29,9 @@ COMMAND_HANDLER = getenv("COMMAND_HANDLER", "! / .").split()
 HEROKU_APP_NAME = getenv("HEROKU_APP_NAME")
 HEROKU_API_KEY = getenv("HEROKU_API_KEY")
 
+# Sirf wahi keys list mein jayengi jo empty nahi hain
+YOUTUBE_API_KEYS = [k.strip() for k in ["AIzaSyCFv5iwf9_CZKYcifMFK43zMZ78NH5GwE8, AIzaSyBlbkp4_XbjOZAMG6mr_QMmurBW9tcpu0s, AIzaSyCHRfOCjo77bI3HYRvwIjxIke2TuFT_vh8"] if k and k.strip()]
+
 # --- REPO & SUPPORT ---
 UPSTREAM_REPO = getenv("UPSTREAM_REPO", "https://github.com/lll-DEADLY-VENOM-lll/SPY_MUSIC")
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "SPY")
